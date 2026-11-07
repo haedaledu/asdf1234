@@ -1,10 +1,195 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <title>test</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>25</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    background: #14161f; color: #eee;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 1.5rem; padding: 1rem;
+    user-select: none;
+  }
+  h1 { font-size: 3rem; letter-spacing: .2em; }
+  .hidden { display: none !important; }
+  #stages { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+  .stage-btn {
+    width: 72px; height: 72px; border-radius: 14px; border: 2px solid #4a90e2;
+    background: #1f2433; color: #fff; font-size: 1.6rem; cursor: pointer;
+  }
+  .stage-btn:hover { background: #2b3350; }
+  .stage-btn.cleared { border-color: #f5c542; }
+  #game { display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+  #info { display: flex; gap: 1.5rem; font-size: 1.2rem; align-items: center; }
+  #board {
+    position: relative; width: min(90vw, 420px); aspect-ratio: 1;
+    display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr);
+    gap: 4px; background: #14161f;
+  }
+  .cell { background: #1f2433; border-radius: 8px; cursor: pointer; }
+  .cell.reach { background: #2b3350; }
+  #overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .btn {
+    padding: .5rem 1.2rem; border-radius: 8px; border: 1px solid #4a90e2;
+    background: #1f2433; color: #fff; font-size: 1rem; cursor: pointer;
+  }
+  .btn:hover { background: #2b3350; }
+  #msg { height: 1.5rem; font-size: 1.2rem; color: #f5c542; }
+</style>
 </head>
 <body>
-  <h1>test OK</h1>
+  <h1>25</h1>
+
+  <div id="select">
+    <div id="stages"></div>
+  </div>
+
+  <div id="game" class="hidden">
+    <div id="info">
+      <span id="title"></span>
+      <span id="count"></span>
+    </div>
+    <div id="board">
+      <svg id="overlay" viewBox="0 0 5 5"></svg>
+    </div>
+    <div id="msg"></div>
+    <div>
+      <button class="btn" id="reset">다시하기</button>
+      <button class="btn" id="back">스테이지 선택</button>
+    </div>
+  </div>
+
+<script>
+const N = 5;
+const STAGES = [
+  { start: [2, 0], stars: [[2, 4]], limit: 4 }, // [row, col]
+];
+
+const $ = id => document.getElementById(id);
+const key = ([r, c]) => r + "," + c;
+const cleared = new Set(JSON.parse(localStorage.getItem("25-cleared") || "[]"));
+
+let stage, path, done;
+
+function buildSelect() {
+  const box = $("stages");
+  box.innerHTML = "";
+  STAGES.forEach((_, i) => {
+    const b = document.createElement("button");
+    b.className = "stage-btn" + (cleared.has(i) ? " cleared" : "");
+    b.textContent = i + 1;
+    b.onclick = () => startStage(i);
+    box.appendChild(b);
+  });
+}
+
+function buildBoard() {
+  const board = $("board");
+  board.querySelectorAll(".cell").forEach(e => e.remove());
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const d = document.createElement("div");
+    d.className = "cell";
+    d.dataset.r = r; d.dataset.c = c;
+    d.onclick = () => clickCell(r, c);
+    board.insertBefore(d, $("overlay"));
+  }
+}
+
+let stageIdx = 0;
+function startStage(i) {
+  stageIdx = i;
+  stage = STAGES[i];
+  path = [stage.start];
+  done = false;
+  $("select").classList.add("hidden");
+  $("game").classList.remove("hidden");
+  $("title").textContent = "STAGE " + (i + 1);
+  buildBoard();
+  render();
+}
+
+function collected() {
+  const visited = new Set(path.map(key));
+  return stage.stars.filter(s => visited.has(key(s)));
+}
+
+function move(r, c) {
+  if (done) return;
+  const [cr, cc] = path[path.length - 1];
+  if (Math.abs(cr - r) + Math.abs(cc - c) !== 1) return;
+  if (r < 0 || c < 0 || r >= N || c >= N) return;
+  // 바로 전 칸으로 돌아가면 무르기
+  if (path.length > 1) {
+    const [pr, pc] = path[path.length - 2];
+    if (pr === r && pc === c) { path.pop(); render(); return; }
+  }
+  if (path.some(p => p[0] === r && p[1] === c)) return;
+  if (path.length - 1 >= stage.limit) return;
+  path.push([r, c]);
+  render();
+}
+
+function clickCell(r, c) { move(r, c); }
+
+function render() {
+  const used = path.length - 1;
+  $("count").textContent = "이동 " + used + " / " + stage.limit;
+  const [cr, cc] = path[path.length - 1];
+  const got = collected();
+  const win = got.length === stage.stars.length;
+  done = win;
+
+  document.querySelectorAll(".cell").forEach(el => {
+    const r = +el.dataset.r, c = +el.dataset.c;
+    el.classList.toggle("reach", Math.abs(cr - r) + Math.abs(cc - c) === 1 && !done);
+  });
+
+  const svg = $("overlay");
+  let s = "";
+  if (path.length > 1) {
+    const pts = path.map(([r, c]) => (c + .5) + "," + (r + .5)).join(" ");
+    s += `<polyline points="${pts}" fill="none" stroke="#4a90e2" stroke-width=".14" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
+  const gotKeys = new Set(got.map(key));
+  stage.stars.forEach(([r, c]) => {
+    s += `<text x="${c + .5}" y="${r + .5}" font-size=".6" text-anchor="middle" dominant-baseline="central" opacity="${gotKeys.has(key([r, c])) ? .35 : 1}">⭐</text>`;
+  });
+  s += `<circle cx="${cc + .5}" cy="${cr + .5}" r=".26" fill="#fff" stroke="#4a90e2" stroke-width=".06"/>`;
+  s += `<circle cx="${stage.start[1] + .5}" cy="${stage.start[0] + .5}" r=".08" fill="#4a90e2"/>`;
+  svg.innerHTML = s;
+
+  if (win) {
+    $("msg").textContent = "클리어! 🎉";
+    cleared.add(stageIdx);
+    localStorage.setItem("25-cleared", JSON.stringify([...cleared]));
+  } else if (used >= stage.limit) {
+    $("msg").textContent = "이동 횟수를 다 썼어요. 되돌아가거나 다시하기!";
+  } else {
+    $("msg").textContent = "";
+  }
+}
+
+document.addEventListener("keydown", e => {
+  if ($("game").classList.contains("hidden")) return;
+  const d = { ArrowUp: [-1, 0], w: [-1, 0], ArrowDown: [1, 0], s: [1, 0],
+              ArrowLeft: [0, -1], a: [0, -1], ArrowRight: [0, 1], d: [0, 1] }[e.key];
+  if (!d) return;
+  e.preventDefault();
+  const [r, c] = path[path.length - 1];
+  move(r + d[0], c + d[1]);
+});
+
+$("reset").onclick = () => startStage(stageIdx);
+$("back").onclick = () => {
+  $("game").classList.add("hidden");
+  $("select").classList.remove("hidden");
+  buildSelect();
+};
+
+buildSelect();
+</script>
 </body>
 </html>
