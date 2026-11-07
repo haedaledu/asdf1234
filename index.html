@@ -37,6 +37,14 @@
     background: #1f2433; color: #fff; font-size: 1rem; cursor: pointer;
   }
   .btn:hover { background: #2b3350; }
+  #editor { display: flex; flex-direction: column; align-items: center; gap: 1rem; width: min(90vw, 460px); }
+  #eboard { width: 100%; aspect-ratio: 1; display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); gap: 4px; }
+  #eboard .cell { display: flex; align-items: center; justify-content: center; font-size: 1.8rem; }
+  .row { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; align-items: center; }
+  .btn.on { background: #4a90e2; }
+  #code { width: 100%; height: 5rem; background: #1f2433; color: #eee; border: 1px solid #4a90e2; border-radius: 8px; padding: .5rem; font-family: monospace; }
+  #limit { width: 4rem; padding: .3rem; border-radius: 6px; border: 1px solid #4a90e2; background: #1f2433; color: #fff; font-size: 1rem; }
+  #emsg { min-height: 1.5rem; color: #f5c542; }
   #msg { height: 1.5rem; font-size: 1.2rem; color: #f5c542; }
 </style>
 </head>
@@ -45,6 +53,25 @@
 
   <div id="select">
     <div id="stages"></div>
+    <div class="row" style="margin-top:1rem"><button class="btn" id="toEditor">🛠 맵 만들기</button></div>
+  </div>
+
+  <div id="editor" class="hidden">
+    <div class="row">
+      <button class="btn on" id="toolStart">🙂 캐릭터</button>
+      <button class="btn" id="toolStar">⭐ 별</button>
+      <label>이동 횟수 <input id="limit" type="number" min="1" max="24" value="4"></label>
+    </div>
+    <div id="eboard"></div>
+    <div id="emsg"></div>
+    <div class="row">
+      <button class="btn" id="eTest">▶ 테스트</button>
+      <button class="btn" id="eExport">코드 내보내기</button>
+      <button class="btn" id="eImport">코드 불러오기</button>
+      <button class="btn" id="eClear">초기화</button>
+      <button class="btn" id="eBack">나가기</button>
+    </div>
+    <textarea id="code" placeholder="{ start: [2, 0], stars: [[2, 4]], limit: 4 },"></textarea>
   </div>
 
   <div id="game" class="hidden">
@@ -98,15 +125,16 @@ function buildBoard() {
   }
 }
 
-let stageIdx = 0;
-function startStage(i) {
+let stageIdx = 0, testing = false;
+function startStage(i, custom) {
+  testing = !!custom;
   stageIdx = i;
-  stage = STAGES[i];
+  stage = custom || STAGES[i];
   path = [stage.start];
   done = false;
   $("select").classList.add("hidden");
   $("game").classList.remove("hidden");
-  $("title").textContent = "STAGE " + (i + 1);
+  $("title").textContent = testing ? "TEST" : "STAGE " + (i + 1);
   buildBoard();
   render();
 }
@@ -163,8 +191,10 @@ function render() {
 
   if (win) {
     $("msg").textContent = "클리어! 🎉";
-    cleared.add(stageIdx);
-    localStorage.setItem("25-cleared", JSON.stringify([...cleared]));
+    if (!testing) {
+      cleared.add(stageIdx);
+      localStorage.setItem("25-cleared", JSON.stringify([...cleared]));
+    }
   } else if (used >= stage.limit) {
     $("msg").textContent = "이동 횟수를 다 썼어요. 되돌아가거나 다시하기!";
   } else {
@@ -182,11 +212,102 @@ document.addEventListener("keydown", e => {
   move(r + d[0], c + d[1]);
 });
 
-$("reset").onclick = () => startStage(stageIdx);
+$("reset").onclick = () => startStage(stageIdx, testing ? stage : null);
 $("back").onclick = () => {
   $("game").classList.add("hidden");
+  if (testing) { $("editor").classList.remove("hidden"); return; }
   $("select").classList.remove("hidden");
   buildSelect();
+};
+
+// ---- 맵 에디터 ----
+let ed = { start: null, stars: [], tool: "start" };
+
+function renderEditor() {
+  const b = $("eboard");
+  b.innerHTML = "";
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const d = document.createElement("div");
+    d.className = "cell";
+    if (ed.start && ed.start[0] === r && ed.start[1] === c) d.textContent = "🙂";
+    else if (ed.stars.some(s => s[0] === r && s[1] === c)) d.textContent = "⭐";
+    d.onclick = () => editCell(r, c);
+    b.appendChild(d);
+  }
+  $("toolStart").classList.toggle("on", ed.tool === "start");
+  $("toolStar").classList.toggle("on", ed.tool === "star");
+}
+
+function editCell(r, c) {
+  const isStart = ed.start && ed.start[0] === r && ed.start[1] === c;
+  if (ed.tool === "start") {
+    ed.start = isStart ? null : [r, c];
+    ed.stars = ed.stars.filter(s => !(s[0] === r && s[1] === c));
+  } else if (!isStart) {
+    const has = ed.stars.some(s => s[0] === r && s[1] === c);
+    ed.stars = has ? ed.stars.filter(s => !(s[0] === r && s[1] === c)) : [...ed.stars, [r, c]];
+  }
+  $("emsg").textContent = "";
+  renderEditor();
+}
+
+function editorStage() {
+  const limit = parseInt($("limit").value, 10);
+  if (!ed.start) return { err: "캐릭터 위치를 정해주세요." };
+  if (!ed.stars.length) return { err: "별을 1개 이상 놓아주세요." };
+  if (!(limit >= 1)) return { err: "이동 횟수는 1 이상이어야 해요." };
+  return { stage: { start: ed.start, stars: ed.stars, limit } };
+}
+
+function stageToCode(s) {
+  return `{ start: [${s.start}], stars: [${s.stars.map(p => "[" + p + "]").join(", ")}], limit: ${s.limit} },`;
+}
+
+function codeToStage(text) {
+  const json = text.replace(/\/\/.*$/gm, "").trim().replace(/,\s*$/, "")
+    .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":');
+  const s = JSON.parse(json);
+  const ok = p => Array.isArray(p) && p.length === 2 && p.every(v => Number.isInteger(v) && v >= 0 && v < N);
+  if (!ok(s.start) || !Array.isArray(s.stars) || !s.stars.length || !s.stars.every(ok) || !(s.limit >= 1))
+    throw new Error("bad");
+  return s;
+}
+
+$("toEditor").onclick = () => {
+  $("select").classList.add("hidden");
+  $("editor").classList.remove("hidden");
+  renderEditor();
+};
+$("toolStart").onclick = () => { ed.tool = "start"; renderEditor(); };
+$("toolStar").onclick = () => { ed.tool = "star"; renderEditor(); };
+$("eClear").onclick = () => { ed = { start: null, stars: [], tool: ed.tool }; $("emsg").textContent = ""; renderEditor(); };
+$("eBack").onclick = () => {
+  $("editor").classList.add("hidden");
+  $("select").classList.remove("hidden");
+};
+$("eTest").onclick = () => {
+  const r = editorStage();
+  if (r.err) { $("emsg").textContent = r.err; return; }
+  $("editor").classList.add("hidden");
+  startStage(0, r.stage);
+};
+$("eExport").onclick = () => {
+  const r = editorStage();
+  if (r.err) { $("emsg").textContent = r.err; return; }
+  const code = stageToCode(r.stage);
+  $("code").value = code;
+  $("code").select();
+  if (navigator.clipboard) navigator.clipboard.writeText(code).catch(() => {});
+  $("emsg").textContent = "코드를 복사했어요. STAGES 배열에 붙여넣으세요.";
+};
+$("eImport").onclick = () => {
+  try {
+    const s = codeToStage($("code").value);
+    ed.start = s.start; ed.stars = s.stars;
+    $("limit").value = s.limit;
+    $("emsg").textContent = "불러왔어요.";
+    renderEditor();
+  } catch (e) { $("emsg").textContent = "코드 형식이 올바르지 않아요."; }
 };
 
 buildSelect();
