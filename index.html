@@ -10,7 +10,7 @@
     font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
     background: #14161f; color: #eee;
     min-height: 100vh; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 1.5rem; padding: 1rem;
+    align-items: center; justify-content: center; gap: 1.2rem; padding: 1rem;
     user-select: none;
   }
   h1 { font-size: 3rem; letter-spacing: .2em; }
@@ -22,30 +22,47 @@
   }
   .stage-btn:hover { background: #2b3350; }
   .stage-btn.cleared { border-color: #f5c542; }
-  #game { display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+  #game, #editor { display: flex; flex-direction: column; align-items: center; gap: .9rem; }
+  #editor { width: min(94vw, 560px); }
   #info { display: flex; gap: 1.5rem; font-size: 1.2rem; align-items: center; }
-  #board {
+
+  .board {
     position: relative; width: min(90vw, 420px); aspect-ratio: 1;
     display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr);
-    gap: 4px; background: #14161f;
+    background: #14161f;
   }
-  .cell { background: #1f2433; border-radius: 8px; cursor: pointer; }
-  .cell.reach { background: #2b3350; }
+  .cell {
+    position: relative; background: #1f2433; border-radius: 8px; cursor: pointer;
+    box-shadow: inset 0 0 0 2px #14161f;
+    display: flex; align-items: center; justify-content: center; font-size: 1.9rem; font-weight: 700;
+  }
+  .cell.blk { background: #c0392b; }
+  .cell.fill { background: #2d6a4f; }
+  .cell.arrow { color: #7ee0a0; }
+  .badge { position: absolute; right: 7px; top: 3px; font-size: .75rem; font-style: normal; opacity: .9; }
+  .mk { position: absolute; left: 5px; font-size: 1rem; }
+  .mk.t { top: 3px; } .mk.b { bottom: 3px; }
   #overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+  .edge { position: absolute; z-index: 2; pointer-events: none; background-clip: content-box; }
+  .edge.R { width: 14px; padding: 0 4px; transform: translateX(-50%); }
+  .edge.D { height: 14px; padding: 4px 0; transform: translateY(-50%); }
+  .wallmode .edge { pointer-events: auto; cursor: pointer; background-color: rgba(255,255,255,.1); }
+  .wallmode .edge:hover { background-color: rgba(255,255,255,.4); }
+  .edge.on, .wallmode .edge.on { background-color: #ecf0f1; }
+
+  .row { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: center; align-items: center; }
   .btn {
-    padding: .5rem 1.2rem; border-radius: 8px; border: 1px solid #4a90e2;
-    background: #1f2433; color: #fff; font-size: 1rem; cursor: pointer;
+    padding: .45rem 1rem; border-radius: 8px; border: 1px solid #4a90e2;
+    background: #1f2433; color: #fff; font-size: .95rem; cursor: pointer;
   }
+  .btn.small { padding: .3rem .6rem; font-size: .85rem; }
   .btn:hover { background: #2b3350; }
-  #editor { display: flex; flex-direction: column; align-items: center; gap: 1rem; width: min(90vw, 460px); }
-  #eboard { width: 100%; aspect-ratio: 1; display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); gap: 4px; }
-  #eboard .cell { display: flex; align-items: center; justify-content: center; font-size: 1.8rem; }
-  .row { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: center; align-items: center; }
   .btn.on { background: #4a90e2; }
-  #code { width: 100%; height: 5rem; background: #1f2433; color: #eee; border: 1px solid #4a90e2; border-radius: 8px; padding: .5rem; font-family: monospace; }
+  #code { width: 100%; height: 7rem; background: #1f2433; color: #eee; border: 1px solid #4a90e2; border-radius: 8px; padding: .5rem; font-family: monospace; }
   #limit { width: 4rem; padding: .3rem; border-radius: 6px; border: 1px solid #4a90e2; background: #1f2433; color: #fff; font-size: 1rem; }
-  #emsg { min-height: 1.5rem; color: #f5c542; }
-  #msg { height: 1.5rem; font-size: 1.2rem; color: #f5c542; }
+  #emsg, #msg { min-height: 1.5rem; color: #f5c542; text-align: center; }
+  #msg { font-size: 1.2rem; }
 </style>
 </head>
 <body>
@@ -57,12 +74,13 @@
   </div>
 
   <div id="editor" class="hidden">
+    <div class="row" id="tools"></div>
     <div class="row">
-      <button class="btn on" id="toolStart">🙂 캐릭터</button>
-      <button class="btn" id="toolStar">⭐ 별</button>
-      <label>이동 횟수 <input id="limit" type="number" min="1" max="24" value="4"></label>
+      <span>방향</span><span class="row" id="dirs"></span>
+      <span>순간이동 쌍</span><span class="row" id="pairs"></span>
+      <label>이동 횟수 <input id="limit" type="number" min="1" max="99" value="4"></label>
     </div>
-    <div id="eboard"></div>
+    <div id="eboard" class="board"></div>
     <div id="emsg"></div>
     <div class="row">
       <button class="btn" id="eTest">▶ 테스트</button>
@@ -71,7 +89,7 @@
       <button class="btn" id="eClear">초기화</button>
       <button class="btn" id="eBack">나가기</button>
     </div>
-    <textarea id="code" placeholder="{ start: [2, 0], stars: [[2, 4]], limit: 4 },"></textarea>
+    <textarea id="code" placeholder='{ start: [2,0], stars: [[2,4]], limit: 4 },'></textarea>
   </div>
 
   <div id="game" class="hidden">
@@ -79,27 +97,162 @@
       <span id="title"></span>
       <span id="count"></span>
     </div>
-    <div id="board">
+    <div id="board" class="board">
       <svg id="overlay" viewBox="0 0 5 5"></svg>
     </div>
     <div id="msg"></div>
-    <div>
+    <div class="row">
+      <button class="btn" id="undo">되돌리기</button>
       <button class="btn" id="reset">다시하기</button>
-      <button class="btn" id="back">스테이지 선택</button>
+      <button class="btn" id="back">나가기</button>
     </div>
   </div>
 
 <script>
-const N = 5;
+/*
+  맵 코드 형식 ([row, col], 0부터 시작)
+  start / start2(듀얼, 선택) : 캐릭터 시작 위치
+  stars : 별 위치들, limit : 이동 횟수
+  tiles : [r, c, 종류, 추가값]
+     "x" 막힌 칸 / "o" 돌 / "f" 채워지기
+     "a1" "a2" 화살표 1칸/2칸 (방향 U D L R)
+     "r1cw" "r2cw" "r1ccw" "r2ccw" 돌아가는 화살표 (시작 방향 U D L R)
+     "tp" 순간이동 (쌍 번호 1~3, 같은 번호 2개가 한 쌍)
+  walls : [r, c, "R"|"D"] 칸의 오른쪽 / 아래쪽 벽
+*/
 const STAGES = [
-  { start: [2, 0], stars: [[2, 4]], limit: 4 }, // [row, col]
+  { start: [2, 0], stars: [[2, 4]], limit: 4 },
 ];
 
+const N = 5;
+const DIRS = ["U", "R", "D", "L"];
+const DR = { U: -1, R: 0, D: 1, L: 0 }, DC = { U: 0, R: 1, D: 0, L: -1 };
+const OPP = { U: "D", D: "U", L: "R", R: "L" };
+const GLYPH1 = { U: "↑", R: "→", D: "↓", L: "←" };
+const GLYPH2 = { U: "⇈", R: "⇉", D: "⇊", L: "⇇" };
+const PAIR_COLORS = ["#e056fd", "#22d3ee", "#f0932b"];
+const STEPS = { a1: 1, a2: 2, r1cw: 1, r2cw: 2, r1ccw: 1, r2ccw: 2 };
+const ROT = { r1cw: 1, r2cw: 1, r1ccw: -1, r2ccw: -1 };
+const PIECE_COLORS = ["#4a90e2", "#f39c12"];
+
 const $ = id => document.getElementById(id);
-const key = ([r, c]) => r + "," + c;
+const key = (r, c) => r + "," + c;
+const inb = (r, c) => r >= 0 && c >= 0 && r < N && c < N;
 const cleared = new Set(JSON.parse(localStorage.getItem("25-cleared") || "[]"));
 
-let stage, path, done;
+/* ---------- 규칙 엔진 ---------- */
+function compile(d) {
+  const tiles = new Map();
+  (d.tiles || []).forEach(([r, c, t, e]) => tiles.set(key(r, c), { t, e }));
+  return {
+    start: d.start, start2: d.start2 || null, stars: d.stars, limit: d.limit,
+    tiles, walls: new Set((d.walls || []).map(([r, c, s]) => r + "," + c + "," + s)),
+  };
+}
+
+const tileOf = (S, r, c) => S.tiles.get(key(r, c));
+
+function wallBetween(S, r, c, d) {
+  if (d === "R") return S.walls.has(`${r},${c},R`);
+  if (d === "L") return S.walls.has(`${r},${c - 1},R`);
+  if (d === "D") return S.walls.has(`${r},${c},D`);
+  return S.walls.has(`${r - 1},${c},D`);
+}
+
+const isFilled = (S, filled, r, c) => {
+  const t = tileOf(S, r, c);
+  return !!t && t.t === "f" && filled.has(key(r, c));
+};
+// 빨간 칸(막힌 칸 + 채워진 칸): 돌과 달리 뛰어넘을 수 없음
+const isRed = (S, filled, r, c) => {
+  const t = tileOf(S, r, c);
+  return (!!t && t.t === "x") || isFilled(S, filled, r, c);
+};
+const isRock = (S, r, c) => { const t = tileOf(S, r, c); return !!t && t.t === "o"; };
+
+function findPartner(S, r, c, pair) {
+  for (const [k, v] of S.tiles) if (v.t === "tp" && v.e === pair && k !== key(r, c)) return k.split(",").map(Number);
+  return null;
+}
+
+// 한 캐릭터를 d 방향으로 한 칸 이동. 막히면 null
+function stepPiece(S, st, work, r, c, d) {
+  const nr = r + DR[d], nc = c + DC[d];
+  if (!inb(nr, nc) || wallBetween(S, r, c, d) || isRed(S, st.filled, nr, nc) || isRock(S, nr, nc)) return null;
+  const landed = [[nr, nc]];
+  let cr = nr, cc = nc;
+  for (let guard = 0; ; guard++) {
+    if (guard > 20) return null;
+    const t = tileOf(S, cr, cc);
+    if (!t) break;
+    if (t.t === "tp") {
+      const o = findPartner(S, cr, cc, t.e);
+      if (o) { cr = o[0]; cc = o[1]; landed.push([cr, cc]); }
+      break;
+    }
+    if (!(t.t in STEPS)) break;
+    const k = key(cr, cc);
+    let dir = t.e;
+    if (t.t in ROT) {
+      const idx = work.rot[k] ?? DIRS.indexOf(t.e);
+      dir = DIRS[idx];
+      work.rot[k] = (idx + ROT[t.t] + 4) % 4;
+    }
+    const n = STEPS[t.t];
+    let pr = cr, pc = cc, ok = true;
+    for (let i = 1; i <= n; i++) {
+      const qr = pr + DR[dir], qc = pc + DC[dir];
+      if (!inb(qr, qc) || wallBetween(S, pr, pc, dir) || isRed(S, st.filled, qr, qc)) { ok = false; break; }
+      if (i === n && isRock(S, qr, qc)) { ok = false; break; }
+      pr = qr; pc = qc;
+    }
+    if (!ok) break;
+    cr = pr; cc = pc;
+    landed.push([cr, cc]);
+  }
+  return { pos: [cr, cc], landed };
+}
+
+function applyMove(S, st, d) {
+  const work = { rot: { ...st.rot } };
+  const filled = new Set(st.filled), got = new Set(st.got);
+  const pos = [], lines = [];
+  let moved = false;
+  st.pos.forEach((p, i) => {
+    const res = stepPiece(S, st, work, p[0], p[1], d);
+    if (!res) { pos.push(p); return; }
+    moved = true;
+    pos.push(res.pos);
+    lines.push({ i, pts: [p, ...res.landed] });
+    res.landed.forEach(q => got.add(key(q[0], q[1])));
+    const ot = tileOf(S, p[0], p[1]);
+    if (ot && ot.t === "f") filled.add(key(p[0], p[1]));
+  });
+  if (!moved) return null;
+  return { pos, filled, rot: work.rot, got, lines, dir: d };
+}
+
+const isWin = (S, st) => S.stars.every(s => st.got.has(key(s[0], s[1])));
+
+/* ---------- 칸 표시 ---------- */
+function cellView(t, filled, rotIdx) {
+  if (!t) return { cls: "", html: "" };
+  switch (t.t) {
+    case "x": return { cls: "blk", html: "" };
+    case "o": return { cls: "", html: "🪨" };
+    case "f": return filled ? { cls: "blk", html: "" } : { cls: "fill", html: "▦" };
+    case "tp": return { cls: "", html: `<span style="color:${PAIR_COLORS[t.e - 1]}">◎</span><i class="badge">${t.e}</i>` };
+  }
+  const rot = t.t in ROT;
+  const dir = rot ? DIRS[rotIdx ?? DIRS.indexOf(t.e)] : t.e;
+  const g = (STEPS[t.t] === 2 ? GLYPH2 : GLYPH1)[dir];
+  const badge = rot ? `<i class="badge">${ROT[t.t] > 0 ? "↻" : "↺"}</i>` : "";
+  return { cls: "arrow", html: g + badge };
+}
+
+/* ---------- 게임 ---------- */
+let S, hist, done, stageIdx = 0, testing = false;
+const cur = () => hist[hist.length - 1];
 
 function buildSelect() {
   const box = $("stages");
@@ -125,13 +278,12 @@ function buildBoard() {
   }
 }
 
-let stageIdx = 0, testing = false;
 function startStage(i, custom) {
   testing = !!custom;
   stageIdx = i;
-  stage = custom || STAGES[i];
-  path = [stage.start];
-  done = false;
+  S = compile(custom || STAGES[i]);
+  const pos = [S.start, ...(S.start2 ? [S.start2] : [])];
+  hist = [{ pos, filled: new Set(), rot: {}, got: new Set(pos.map(p => key(p[0], p[1]))), lines: [], dir: null }];
   $("select").classList.add("hidden");
   $("game").classList.remove("hidden");
   $("title").textContent = testing ? "TEST" : "STAGE " + (i + 1);
@@ -139,64 +291,75 @@ function startStage(i, custom) {
   render();
 }
 
-function collected() {
-  const visited = new Set(path.map(key));
-  return stage.stars.filter(s => visited.has(key(s)));
-}
-
-function move(r, c) {
-  if (done) return;
-  const [cr, cc] = path[path.length - 1];
-  if (Math.abs(cr - r) + Math.abs(cc - c) !== 1) return;
-  if (r < 0 || c < 0 || r >= N || c >= N) return;
-  // 바로 전 칸으로 돌아가면 무르기
-  if (path.length > 1) {
-    const [pr, pc] = path[path.length - 2];
-    if (pr === r && pc === c) { path.pop(); render(); return; }
-  }
-  if (path.some(p => p[0] === r && p[1] === c)) return;
-  if (path.length - 1 >= stage.limit) return;
-  path.push([r, c]);
+function move(d) {
+  const st = cur();
+  if (hist.length > 1 && d === OPP[st.dir]) { hist.pop(); render(); return; }
+  if (done || hist.length - 1 >= S.limit) return;
+  const nx = applyMove(S, st, d);
+  if (!nx) return;
+  hist.push(nx);
   render();
 }
 
-function clickCell(r, c) { move(r, c); }
+function clickCell(r, c) {
+  if (!S) return;
+  for (const p of cur().pos) {
+    const dr = r - p[0], dc = c - p[1];
+    if (Math.abs(dr) + Math.abs(dc) !== 1) continue;
+    move(dr === -1 ? "U" : dr === 1 ? "D" : dc === 1 ? "R" : "L");
+    return;
+  }
+}
+
+function undo() { if (hist.length > 1) { hist.pop(); render(); } }
 
 function render() {
-  const used = path.length - 1;
-  $("count").textContent = "이동 " + used + " / " + stage.limit;
-  const [cr, cc] = path[path.length - 1];
-  const got = collected();
-  const win = got.length === stage.stars.length;
-  done = win;
+  const st = cur();
+  const used = hist.length - 1;
+  $("count").textContent = "이동 " + used + " / " + S.limit;
+  done = isWin(S, st);
 
-  document.querySelectorAll(".cell").forEach(el => {
-    const r = +el.dataset.r, c = +el.dataset.c;
-    el.classList.toggle("reach", Math.abs(cr - r) + Math.abs(cc - c) === 1 && !done);
+  document.querySelectorAll("#board .cell").forEach(el => {
+    const r = +el.dataset.r, c = +el.dataset.c, k = key(r, c);
+    const v = cellView(tileOf(S, r, c), st.filled.has(k), st.rot[k]);
+    el.className = "cell " + v.cls;
+    el.innerHTML = v.html;
   });
 
-  const svg = $("overlay");
   let s = "";
-  if (path.length > 1) {
-    const pts = path.map(([r, c]) => (c + .5) + "," + (r + .5)).join(" ");
-    s += `<polyline points="${pts}" fill="none" stroke="#4a90e2" stroke-width=".14" stroke-linecap="round" stroke-linejoin="round"/>`;
-  }
-  const gotKeys = new Set(got.map(key));
-  stage.stars.forEach(([r, c]) => {
-    s += `<text x="${c + .5}" y="${r + .5}" font-size=".6" text-anchor="middle" dominant-baseline="central" opacity="${gotKeys.has(key([r, c])) ? .35 : 1}">⭐</text>`;
+  S.walls.forEach(w => {
+    const [r, c, side] = w.split(",");
+    const R = +r, C = +c;
+    s += side === "R"
+      ? `<line x1="${C + 1}" y1="${R + .04}" x2="${C + 1}" y2="${R + .96}" stroke="#ecf0f1" stroke-width=".1" stroke-linecap="round"/>`
+      : `<line x1="${C + .04}" y1="${R + 1}" x2="${C + .96}" y2="${R + 1}" stroke="#ecf0f1" stroke-width=".1" stroke-linecap="round"/>`;
   });
-  s += `<circle cx="${cc + .5}" cy="${cr + .5}" r=".26" fill="#fff" stroke="#4a90e2" stroke-width=".06"/>`;
-  s += `<circle cx="${stage.start[1] + .5}" cy="${stage.start[0] + .5}" r=".08" fill="#4a90e2"/>`;
-  svg.innerHTML = s;
+  for (const h of hist) for (const ln of h.lines) {
+    for (let j = 1; j < ln.pts.length; j++) {
+      const a = ln.pts[j - 1], b = ln.pts[j];
+      const dashed = Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) !== 1;
+      s += `<line x1="${a[1] + .5}" y1="${a[0] + .5}" x2="${b[1] + .5}" y2="${b[0] + .5}" stroke="${PIECE_COLORS[ln.i]}" stroke-width=".13" stroke-linecap="round"${dashed ? ' stroke-dasharray=".12 .18"' : ""}/>`;
+    }
+  }
+  S.stars.forEach(([r, c]) => {
+    s += `<text x="${c + .5}" y="${r + .5}" font-size=".6" text-anchor="middle" dominant-baseline="central" opacity="${st.got.has(key(r, c)) ? .35 : 1}">⭐</text>`;
+  });
+  S.start && [S.start, S.start2].forEach((p, i) => {
+    if (p) s += `<circle cx="${p[1] + .5}" cy="${p[0] + .5}" r=".08" fill="${PIECE_COLORS[i]}"/>`;
+  });
+  st.pos.forEach((p, i) => {
+    s += `<circle cx="${p[1] + .5}" cy="${p[0] + .5}" r=".26" fill="#fff" stroke="${PIECE_COLORS[i]}" stroke-width=".07"/>`;
+  });
+  $("overlay").innerHTML = s;
 
-  if (win) {
+  if (done) {
     $("msg").textContent = "클리어! 🎉";
     if (!testing) {
       cleared.add(stageIdx);
       localStorage.setItem("25-cleared", JSON.stringify([...cleared]));
     }
-  } else if (used >= stage.limit) {
-    $("msg").textContent = "이동 횟수를 다 썼어요. 되돌아가거나 다시하기!";
+  } else if (used >= S.limit) {
+    $("msg").textContent = "이동 횟수를 다 썼어요. 되돌리거나 다시하기!";
   } else {
     $("msg").textContent = "";
   }
@@ -204,15 +367,15 @@ function render() {
 
 document.addEventListener("keydown", e => {
   if ($("game").classList.contains("hidden")) return;
-  const d = { ArrowUp: [-1, 0], w: [-1, 0], ArrowDown: [1, 0], s: [1, 0],
-              ArrowLeft: [0, -1], a: [0, -1], ArrowRight: [0, 1], d: [0, 1] }[e.key];
+  if (e.key === "z" || e.key === "Backspace") { e.preventDefault(); undo(); return; }
+  const d = { ArrowUp: "U", w: "U", ArrowDown: "D", s: "D", ArrowLeft: "L", a: "L", ArrowRight: "R", d: "R" }[e.key];
   if (!d) return;
   e.preventDefault();
-  const [r, c] = path[path.length - 1];
-  move(r + d[0], c + d[1]);
+  move(d);
 });
 
-$("reset").onclick = () => startStage(stageIdx, testing ? stage : null);
+$("undo").onclick = undo;
+$("reset").onclick = () => startStage(stageIdx, testing ? testDef : null);
 $("back").onclick = () => {
   $("game").classList.add("hidden");
   if (testing) { $("editor").classList.remove("hidden"); return; }
@@ -220,94 +383,209 @@ $("back").onclick = () => {
   buildSelect();
 };
 
-// ---- 맵 에디터 ----
-let ed = { start: null, stars: [], tool: "start" };
+/* ---------- 맵 에디터 ---------- */
+const TOOLS = [
+  ["start", "🙂 캐릭터"], ["start2", "😎 캐릭터2 (듀얼)"], ["star", "⭐ 별"],
+  ["x", "🟥 빨간 칸"], ["o", "🪨 돌"], ["f", "▦ 채워지기"],
+  ["a1", "→ 화살표 1칸"], ["a2", "⇉ 화살표 2칸"],
+  ["r1cw", "↻ 1칸 시계"], ["r2cw", "↻ 2칸 시계"], ["r1ccw", "↺ 1칸 반시계"], ["r2ccw", "↺ 2칸 반시계"],
+  ["tp", "◎ 순간이동"], ["wall", "▮ 벽"], ["erase", "🧽 지우개"],
+];
+let ed = { start: null, start2: null, stars: [], tiles: new Map(), walls: new Set(), tool: "start", dir: "R", pair: 1 };
+let testDef = null;
+const emsg = t => { $("emsg").textContent = t; };
+
+function renderTools() {
+  $("tools").innerHTML = "";
+  TOOLS.forEach(([id, label]) => {
+    const b = document.createElement("button");
+    b.className = "btn small" + (ed.tool === id ? " on" : "");
+    b.textContent = label;
+    b.onclick = () => { ed.tool = id; renderTools(); renderEditor(); };
+    $("tools").appendChild(b);
+  });
+  $("dirs").innerHTML = "";
+  DIRS.forEach(d => {
+    const b = document.createElement("button");
+    b.className = "btn small" + (ed.dir === d ? " on" : "");
+    b.textContent = GLYPH1[d];
+    b.onclick = () => { ed.dir = d; renderTools(); };
+    $("dirs").appendChild(b);
+  });
+  $("pairs").innerHTML = "";
+  [1, 2, 3].forEach(p => {
+    const b = document.createElement("button");
+    b.className = "btn small" + (ed.pair === p ? " on" : "");
+    b.style.color = PAIR_COLORS[p - 1];
+    b.textContent = "◎" + p;
+    b.onclick = () => { ed.pair = p; renderTools(); };
+    $("pairs").appendChild(b);
+  });
+}
 
 function renderEditor() {
   const b = $("eboard");
   b.innerHTML = "";
+  b.classList.toggle("wallmode", ed.tool === "wall");
+  const at = (p, r, c) => p && p[0] === r && p[1] === c;
   for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
     const d = document.createElement("div");
-    d.className = "cell";
-    if (ed.start && ed.start[0] === r && ed.start[1] === c) d.textContent = "🙂";
-    else if (ed.stars.some(s => s[0] === r && s[1] === c)) d.textContent = "⭐";
+    const v = cellView(ed.tiles.get(key(r, c)), false);
+    d.className = "cell " + v.cls;
+    d.innerHTML = v.html
+      + (ed.stars.some(s => at(s, r, c)) ? '<span class="mk t">⭐</span>' : "")
+      + (at(ed.start, r, c) ? '<span class="mk b">🙂</span>' : "")
+      + (at(ed.start2, r, c) ? '<span class="mk b">😎</span>' : "");
     d.onclick = () => editCell(r, c);
     b.appendChild(d);
   }
-  $("toolStart").classList.toggle("on", ed.tool === "start");
-  $("toolStar").classList.toggle("on", ed.tool === "star");
+  const edge = (r, c, side) => {
+    const e = document.createElement("div");
+    const k = `${r},${c},${side}`;
+    e.className = "edge " + side + (ed.walls.has(k) ? " on" : "");
+    if (side === "R") { e.style.left = (c + 1) * 20 + "%"; e.style.top = r * 20 + "%"; e.style.height = "20%"; }
+    else { e.style.top = (r + 1) * 20 + "%"; e.style.left = c * 20 + "%"; e.style.width = "20%"; }
+    e.onclick = () => {
+      if (ed.walls.has(k)) ed.walls.delete(k); else ed.walls.add(k);
+      renderEditor();
+    };
+    b.appendChild(e);
+  };
+  for (let r = 0; r < N; r++) for (let c = 0; c < N - 1; c++) edge(r, c, "R");
+  for (let r = 0; r < N - 1; r++) for (let c = 0; c < N; c++) edge(r, c, "D");
 }
 
 function editCell(r, c) {
-  const isStart = ed.start && ed.start[0] === r && ed.start[1] === c;
-  if (ed.tool === "start") {
-    ed.start = isStart ? null : [r, c];
-    ed.stars = ed.stars.filter(s => !(s[0] === r && s[1] === c));
-  } else if (!isStart) {
-    const has = ed.stars.some(s => s[0] === r && s[1] === c);
-    ed.stars = has ? ed.stars.filter(s => !(s[0] === r && s[1] === c)) : [...ed.stars, [r, c]];
+  const k = key(r, c), tool = ed.tool, cur = ed.tiles.get(k);
+  const same = p => !!p && p[0] === r && p[1] === c;
+  const clearObjs = () => {
+    ed.stars = ed.stars.filter(s => !same(s));
+    if (same(ed.start)) ed.start = null;
+    if (same(ed.start2)) ed.start2 = null;
+  };
+  emsg("");
+  if (tool === "wall") return;
+  if (tool === "erase") {
+    ed.tiles.delete(k);
+    clearObjs();
+  } else if (tool === "start" || tool === "start2") {
+    const other = tool === "start" ? "start2" : "start";
+    if (same(ed[tool])) ed[tool] = null;
+    else {
+      if (cur && (cur.t === "x" || cur.t === "o")) ed.tiles.delete(k);
+      if (same(ed[other])) ed[other] = null;
+      ed[tool] = [r, c];
+    }
+  } else if (tool === "star") {
+    if (ed.stars.some(same)) ed.stars = ed.stars.filter(s => !same(s));
+    else if (cur && (cur.t === "x" || cur.t === "o")) emsg("막힌 칸에는 별을 놓을 수 없어요.");
+    else ed.stars.push([r, c]);
+  } else {
+    const e = tool in STEPS ? ed.dir : tool === "tp" ? ed.pair : undefined;
+    if (cur && cur.t === tool && cur.e === e) ed.tiles.delete(k);
+    else {
+      if (tool === "tp") {
+        const n = [...ed.tiles].filter(([kk, v]) => v.t === "tp" && v.e === e && kk !== k).length;
+        if (n >= 2) { emsg(`순간이동 ${e}번은 이미 2개예요. 다른 쌍을 고르세요.`); return; }
+      }
+      ed.tiles.set(k, { t: tool, e });
+      if (tool === "x" || tool === "o") clearObjs();
+    }
   }
-  $("emsg").textContent = "";
   renderEditor();
 }
 
-function editorStage() {
+function editorDef() {
   const limit = parseInt($("limit").value, 10);
   if (!ed.start) return { err: "캐릭터 위치를 정해주세요." };
   if (!ed.stars.length) return { err: "별을 1개 이상 놓아주세요." };
   if (!(limit >= 1)) return { err: "이동 횟수는 1 이상이어야 해요." };
-  return { stage: { start: ed.start, stars: ed.stars, limit } };
+  for (const p of [1, 2, 3]) {
+    const n = [...ed.tiles.values()].filter(v => v.t === "tp" && v.e === p).length;
+    if (n === 1) return { err: `순간이동 ${p}번이 1개뿐이에요. 2개를 놓아주세요.` };
+  }
+  const def = { start: ed.start };
+  if (ed.start2) def.start2 = ed.start2;
+  def.stars = ed.stars;
+  def.limit = limit;
+  const tiles = [...ed.tiles].map(([k, v]) => [...k.split(",").map(Number), v.t, ...(v.e !== undefined ? [v.e] : [])]);
+  if (tiles.length) def.tiles = tiles;
+  const walls = [...ed.walls].map(w => { const [r, c, s] = w.split(","); return [+r, +c, s]; });
+  if (walls.length) def.walls = walls;
+  return { def };
 }
 
-function stageToCode(s) {
-  return `{ start: [${s.start}], stars: [${s.stars.map(p => "[" + p + "]").join(", ")}], limit: ${s.limit} },`;
+function defToCode(d) {
+  const parts = [`start: ${JSON.stringify(d.start)}`];
+  if (d.start2) parts.push(`start2: ${JSON.stringify(d.start2)}`);
+  parts.push(`stars: ${JSON.stringify(d.stars)}`, `limit: ${d.limit}`);
+  if (d.tiles) parts.push(`tiles: ${JSON.stringify(d.tiles)}`);
+  if (d.walls) parts.push(`walls: ${JSON.stringify(d.walls)}`);
+  return `{ ${parts.join(", ")} },`;
 }
 
-function codeToStage(text) {
+function codeToDef(text) {
   const json = text.replace(/\/\/.*$/gm, "").trim().replace(/,\s*$/, "")
     .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":');
   const s = JSON.parse(json);
-  const ok = p => Array.isArray(p) && p.length === 2 && p.every(v => Number.isInteger(v) && v >= 0 && v < N);
-  if (!ok(s.start) || !Array.isArray(s.stars) || !s.stars.length || !s.stars.every(ok) || !(s.limit >= 1))
-    throw new Error("bad");
+  const pos = p => Array.isArray(p) && p.length === 2 && p.every(v => Number.isInteger(v) && v >= 0 && v < N);
+  const bad = () => { throw new Error("bad"); };
+  if (!pos(s.start) || (s.start2 && !pos(s.start2)) || !Array.isArray(s.stars) || !s.stars.length
+      || !s.stars.every(pos) || !(s.limit >= 1)) bad();
+  (s.tiles || []).forEach(([r, c, t, e]) => {
+    if (!pos([r, c])) bad();
+    if (["x", "o", "f"].includes(t)) return;
+    if (t in STEPS) { if (!DIRS.includes(e)) bad(); return; }
+    if (t === "tp" && [1, 2, 3].includes(e)) return;
+    bad();
+  });
+  (s.walls || []).forEach(([r, c, side]) => {
+    if (!pos([r, c]) || !(side === "R" ? c < N - 1 : side === "D" && r < N - 1)) bad();
+  });
   return s;
 }
 
 $("toEditor").onclick = () => {
   $("select").classList.add("hidden");
   $("editor").classList.remove("hidden");
+  renderTools();
   renderEditor();
 };
-$("toolStart").onclick = () => { ed.tool = "start"; renderEditor(); };
-$("toolStar").onclick = () => { ed.tool = "star"; renderEditor(); };
-$("eClear").onclick = () => { ed = { start: null, stars: [], tool: ed.tool }; $("emsg").textContent = ""; renderEditor(); };
+$("eClear").onclick = () => {
+  ed = { ...ed, start: null, start2: null, stars: [], tiles: new Map(), walls: new Set() };
+  emsg("");
+  renderEditor();
+};
 $("eBack").onclick = () => {
   $("editor").classList.add("hidden");
   $("select").classList.remove("hidden");
 };
 $("eTest").onclick = () => {
-  const r = editorStage();
-  if (r.err) { $("emsg").textContent = r.err; return; }
+  const r = editorDef();
+  if (r.err) { emsg(r.err); return; }
+  testDef = r.def;
   $("editor").classList.add("hidden");
-  startStage(0, r.stage);
+  startStage(0, testDef);
 };
 $("eExport").onclick = () => {
-  const r = editorStage();
-  if (r.err) { $("emsg").textContent = r.err; return; }
-  const code = stageToCode(r.stage);
+  const r = editorDef();
+  if (r.err) { emsg(r.err); return; }
+  const code = defToCode(r.def);
   $("code").value = code;
   $("code").select();
   if (navigator.clipboard) navigator.clipboard.writeText(code).catch(() => {});
-  $("emsg").textContent = "코드를 복사했어요. STAGES 배열에 붙여넣으세요.";
+  emsg("코드를 복사했어요. STAGES 배열에 붙여넣으세요.");
 };
 $("eImport").onclick = () => {
   try {
-    const s = codeToStage($("code").value);
-    ed.start = s.start; ed.stars = s.stars;
+    const s = codeToDef($("code").value);
+    ed.start = s.start; ed.start2 = s.start2 || null; ed.stars = s.stars.map(p => [...p]);
+    ed.tiles = new Map((s.tiles || []).map(([r, c, t, e]) => [key(r, c), { t, e }]));
+    ed.walls = new Set((s.walls || []).map(([r, c, side]) => `${r},${c},${side}`));
     $("limit").value = s.limit;
-    $("emsg").textContent = "불러왔어요.";
+    emsg("불러왔어요.");
     renderEditor();
-  } catch (e) { $("emsg").textContent = "코드 형식이 올바르지 않아요."; }
+  } catch (e) { emsg("코드 형식이 올바르지 않아요."); }
 };
 
 buildSelect();
